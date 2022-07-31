@@ -1,4 +1,4 @@
-module github.com/wk8/go-ordered-map/v2
+module github.com/invakid404/go-ordered-map
 
 go 1.18
 

@@ -8,6 +8,8 @@
 package orderedmap
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 
 	list "github.com/bahlo/generic-list-go"
@@ -190,4 +192,77 @@ func (om *OrderedMap[K, V]) MoveToFront(key K) error {
 	}
 	om.list.MoveToFront(pair.element)
 	return nil
+}
+
+func (om *OrderedMap[K, V]) MarshalJSON() ([]byte, error) {
+	var buffer bytes.Buffer
+	buffer.WriteByte('{')
+
+	jsonEncoder := json.NewEncoder(&buffer)
+
+	index := 0
+	for pair := om.Oldest(); pair != nil; pair = pair.Next() {
+		if index > 0 {
+			buffer.WriteByte(',')
+		}
+
+		// Encode key
+		if err := jsonEncoder.Encode(pair.Key); err != nil {
+			return nil, err
+		}
+
+		buffer.WriteByte(':')
+
+		// Encode value
+		if err := jsonEncoder.Encode(pair.Value); err != nil {
+			return nil, err
+		}
+
+		index++
+	}
+
+	buffer.WriteByte('}')
+	return buffer.Bytes(), nil
+}
+
+// UnmarshalJSON parses a JSON-encoded ordered map.
+func (om *OrderedMap[K, V]) UnmarshalJSON(data []byte) error {
+	if om.pairs == nil {
+		om.pairs = make(map[K]*Pair[K, V])
+	}
+
+	if om.list == nil {
+		om.list = list.New[*Pair[K, V]]()
+	}
+
+	jsonDecoder := json.NewDecoder(bytes.NewReader(data))
+
+	// Consume '{'
+	_, _ = jsonDecoder.Token()
+
+	for {
+		token, err := jsonDecoder.Token()
+		if err != nil {
+			return err
+		}
+
+		// Check for end of map
+		if delimiter, ok := token.(json.Delim); ok && delimiter == '}' {
+			return nil
+		}
+
+		// Ensure key is the correct type
+		key, ok := token.(K)
+		if !ok {
+			return fmt.Errorf("invalid key: %v", key)
+		}
+
+		// Parse value
+		var value V
+		if err = jsonDecoder.Decode(&value); err != nil {
+			return err
+		}
+
+		om.Set(key, value)
+	}
 }
